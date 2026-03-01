@@ -189,7 +189,20 @@ oci os bucket create \
   --compartment-id <YOUR_COMPARTMENT_OCID>
 ```
 
-### Step 2: Git リポジトリの準備
+### Step 2: Terraform バックエンドのネームスペース更新
+
+OCI Object Storage のバックエンド設定にはテナンシーネームスペースが必要です。以下のコマンドで自分のネームスペースを確認し、ファイルを書き換えてください。
+
+```bash
+# テナンシーネームスペースを取得して変数に格納
+NAMESPACE=$(oci os ns get --query 'data' --raw-output)
+
+# 両ファイルのプレースホルダーを置き換え
+sed -i '' "s/<YOUR_TENANCY_NAMESPACE>/$NAMESPACE/g" terraform/infra/_terraform.tf
+sed -i '' "s/<YOUR_TENANCY_NAMESPACE>/$NAMESPACE/g" terraform/config/_terraform.tf
+```
+
+### Step 3: Git リポジトリの準備
 
 このリポジトリを fork または clone して、GitHub に push します。
 
