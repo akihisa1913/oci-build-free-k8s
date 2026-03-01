@@ -1,0 +1,4 @@
+appName: lychee
+namespace: lychee
+gitPath: gitops/core/lychee
+syncWave: "0"

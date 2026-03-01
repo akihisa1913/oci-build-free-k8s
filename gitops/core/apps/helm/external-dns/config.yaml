@@ -1,0 +1,6 @@
+appName: external-dns
+namespace: external-dns
+helmRepoURL: https://kubernetes-sigs.github.io/external-dns
+chart: external-dns
+chartVersion: 1.20.0
+gitPath: gitops/core/external-dns

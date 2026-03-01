@@ -1,7 +1,6 @@
-# OCI Free Tier Kubernetes クラスター (ArgoCD 版)
+# OCI Free Tier Kubernetes クラスター
 
-Oracle Cloud の [Always Free Tier][oci-free-tier] を利用して、**月額コスト 0 円** で本格的な Kubernetes クラスターを構築します。
-元リポジトリ [oci-free-cloud-k8s](https://github.com/nce/oci-free-cloud-k8s) をベースに、CD ツールを **FluxCD → ArgoCD** へ変更し、Kubernetes バージョンを **v1.35.1** に更新しています。
+Oracle Cloud の [Always Free Tier][oci-free-tier] を利用して、**月額コスト 0 円** で Kubernetes クラスターを構築します。
 
 [oci-free-tier]: https://docs.oracle.com/en-us/iaas/Content/FreeTier/freetier_topic-Always_Free_Resources.htm
 
@@ -56,14 +55,15 @@ graph TD
 
     subgraph argocd_ns["namespace: argocd"]
         ARGO["ArgoCD"]
-        ROOT["Application core-apps"]
+        HELMSET["ApplicationSet core-helm-apps"]
+        GITONLYSET["ApplicationSet core-gitonly-apps"]
     end
 
     TF -->|"helm install"| ARGO
-    TF -->|"kubectl apply"| ROOT
-    ARGO -->|"管理"| ROOT
+    TF -->|"kubectl apply"| HELMSET & GITONLYSET
+    ARGO -->|"管理"| HELMSET & GITONLYSET
 
-    subgraph apps["App of Apps — gitops/core/apps/"]
+    subgraph apps["ApplicationSet — gitops/core/apps/"]
         direction LR
         ES["external-secrets OCI Vault 連携"]
         CM["cert-manager Let's Encrypt DNS01"]
@@ -79,8 +79,9 @@ graph TD
         LY["lychee カスタムアプリ"]
     end
 
-    ROOT -->|"App of Apps"| ES & CM & EG & ED & DEX
-    ROOT -->|"App of Apps"| KPS & GF & LH & TP & MS & S3 & LY
+    HELMSET -->|"生成"| ES & CM & EG & ED & DEX
+    HELMSET -->|"生成"| KPS & GF & LH & TP & MS & S3
+    GITONLYSET -->|"生成"| LY
 ```
 
 ### Terraform 構成
@@ -93,43 +94,46 @@ terraform/
                     # ← infra の後に apply
 ```
 
-### GitOps 構成 (App of Apps パターン)
+### GitOps 構成 (ApplicationSet パターン)
 
 ```
 gitops/core/
-├── apps/                          # ArgoCD Application 定義 (App of Apps)
-│   ├── kustomization.yaml         # ArgoCD が同期するエントリポイント
-│   ├── external-secrets.yaml
-│   ├── cert-manager.yaml
-│   ├── cert-manager-issuer.yaml
-│   ├── dex.yaml
-│   ├── envoy-gateway.yaml
-│   ├── external-dns.yaml
-│   ├── grafana.yaml
-│   ├── kube-prometheus-stack.yaml
-│   ├── longhorn.yaml
-│   ├── metrics-server.yaml
-│   ├── s3-proxy.yaml
-│   ├── teleport.yaml
-│   └── lychee.yaml
+├── apps/                          # ApplicationSet generator 用パラメータファイル
+│   ├── helm/                      # Helm+Git マルチソース アプリ (core-helm-apps が管理)
+│   │   ├── cert-manager/config.yaml
+│   │   ├── dex/config.yaml
+│   │   ├── envoy-gateway/config.yaml
+│   │   ├── external-dns/config.yaml
+│   │   ├── external-secrets/config.yaml
+│   │   ├── grafana/config.yaml
+│   │   ├── kube-prometheus-stack/config.yaml
+│   │   ├── longhorn/config.yaml
+│   │   ├── metrics-server/config.yaml
+│   │   ├── s3-proxy/config.yaml
+│   │   └── teleport/config.yaml
+│   └── gitonly/                   # Git のみ アプリ (core-gitonly-apps が管理)
+│       ├── cert-manager-issuer/config.yaml
+│       └── lychee/config.yaml
 │
-├── cert-manager/          # Namespace + ClusterIssuer 定義
-├── dex/                   # Namespace + HTTPRoute + Secret
-├── envoy-gateway/         # Namespace + Gateway + EnvoyProxy
-├── external-dns/          # Namespace + Secret + DNS records
-├── external-secrets/      # Namespace
-├── grafana/               # Namespace + HTTPRoute + Dashboards
-├── kube-prometheus-stack/ # Namespace + HTTPRoute + SecurityPolicy
-├── longhorn/              # Namespace + HTTPRoute + SecurityPolicy
+├── cert-manager/          # Namespace + ClusterIssuer 定義 + values.yaml
+├── dex/                   # Namespace + HTTPRoute + Secret + values.yaml
+├── envoy-gateway/         # Namespace + Gateway + EnvoyProxy + values.yaml
+├── external-dns/          # Namespace + Secret + DNS records + values.yaml
+├── external-secrets/      # Namespace + values.yaml
+├── grafana/               # Namespace + HTTPRoute + Dashboards + values.yaml
+├── kube-prometheus-stack/ # Namespace + HTTPRoute + SecurityPolicy + values.yaml
+├── longhorn/              # Namespace + HTTPRoute + SecurityPolicy + values.yaml
 ├── lychee/                # Namespace + Deployment + Service
-├── metrics-server/        # Namespace
-├── s3-proxy/              # Namespace + HTTPRoute + Secret
-└── teleport/              # Namespace + RBAC
+├── metrics-server/        # Namespace + values.yaml
+├── s3-proxy/              # Namespace + HTTPRoute + Secret + values.yaml
+└── teleport/              # Namespace + RBAC + values.yaml
 ```
 
-各 Application は **multi-source** 形式で:
-1. Helm chart レポジトリから Chart を取得
-2. このリポジトリの `gitops/core/<component>/` からマニフェストを取得
+Helm アプリは **multi-source** 形式で:
+1. Helm chart レポジトリから Chart を取得 (`config.yaml` の `helmRepoURL` / `chart` / `chartVersion`)
+2. このリポジトリの `gitops/core/<component>/` から追加マニフェストと `values.yaml` を取得
+
+Git-only アプリはこのリポジトリの `gitops/core/<component>/` のみを参照します。
 
 ---
 
@@ -192,18 +196,11 @@ oci os bucket create \
 ```bash
 git clone https://github.com/YOUR_ORG/oci-build-free-k8s.git
 cd oci-build-free-k8s
-```
-
-**ArgoCD Application のリポジトリ URL を更新します:**
-
-```bash
-# gitops/core/apps/ 以下の全 Application ファイルの GIT_REPO_URL を置換
-find gitops/core/apps -name "*.yaml" -exec \
-  sed -i '' 's|GIT_REPO_URL|https://github.com/YOUR_ORG/oci-build-free-k8s.git|g' {} \;
-
-git commit -am "chore: set git repository URL for ArgoCD"
 git push
 ```
+
+> [!NOTE]
+> Git リポジトリ URL の設定は不要です。ArgoCD ApplicationSet は Terraform の `git_url` 変数から直接 URL を参照するため、ファイルの書き換えは必要ありません。
 
 ### Step 3: OCI Vault の準備
 
@@ -285,7 +282,7 @@ kubectl --kubeconfig ../.kube.config -n argocd get secret argocd-initial-admin-s
 
 ブラウザで http://localhost:8080 を開き、`admin` / 上記パスワードでログインします。
 
-`core-apps` Application が正常に同期されると、配下の全コンポーネントが自動デプロイされます。
+`core-helm-apps` / `core-gitonly-apps` ApplicationSet が Application を生成し始めると、配下の全コンポーネントが自動デプロイされます。
 
 ### Step 7: DNS と証明書の確認
 
@@ -323,24 +320,33 @@ brew install argocd
 # ログイン
 argocd login localhost:8080 --username admin
 
-# Application 一覧
-argocd app list
+# ApplicationSet 一覧
+argocd appset list
 
-# 手動同期
-argocd app sync core-apps
+# Application 一覧 (ApplicationSet が生成したものを含む)
+argocd app list
 
 # 特定 Application の状態確認
 argocd app get cert-manager
+
+# ApplicationSet が生成した Application を手動同期
+argocd app sync cert-manager
 ```
 
 ### 開発ブランチへの切り替え
 
-feature ブランチで作業する場合、ArgoCD の root Application の `targetRevision` を変更します:
+feature ブランチで作業する場合、Terraform の `git_revision` 変数を変更して `terraform apply` するか、両 ApplicationSet の `targetRevision` を直接パッチします:
 
 ```bash
-kubectl --kubeconfig ../.kube.config -n argocd patch application core-apps \
-  --type='json' \
-  -p='[{"op":"replace","path":"/spec/source/targetRevision","value":"refs/heads/feature-branch"}]'
+# terraform.tfvars で変更する場合
+# git_revision = "refs/heads/feature-branch" を追加して terraform apply
+
+# kubectl で直接変更する場合
+for appset in core-helm-apps core-gitonly-apps; do
+  kubectl --kubeconfig ../.kube.config -n argocd patch applicationset $appset \
+    --type='json' \
+    -p='[{"op":"replace","path":"/spec/generators/0/git/revision","value":"refs/heads/feature-branch"}]'
+done
 ```
 
 ### Teleport によるクラスターアクセス
@@ -437,7 +443,7 @@ Always Free Tier を正しく使用した場合の月額コスト: **¥0**
 
 ### ArgoCD
 - [ArgoCD 公式ドキュメント][argocd-docs]
-- [App of Apps パターン][argocd-app-of-apps]
+- [ApplicationSet][argocd-applicationset]
 - [Multi-source Applications][argocd-multi-source]
 
 ### Teleport
@@ -453,7 +459,7 @@ Always Free Tier を正しく使用した場合の月額コスト: **¥0**
 [secrets-templating]: https://external-secrets.io/v0.15.0/guides/templating/#helm
 [dns-crds]: https://kubernetes-sigs.github.io/external-dns/latest/docs/sources/crd/#using-crd-source-to-manage-dns-records-in-different-dns-providers
 [argocd-docs]: https://argo-cd.readthedocs.io/
-[argocd-app-of-apps]: https://argo-cd.readthedocs.io/en/stable/operator-manual/cluster-bootstrapping/
+[argocd-applicationset]: https://argo-cd.readthedocs.io/en/stable/operator-manual/applicationset/
 [argocd-multi-source]: https://argo-cd.readthedocs.io/en/stable/user-guide/multiple_sources/
 [teleport-helm-doc]: https://goteleport.com/docs/admin-guides/deploy-a-cluster/helm-deployments/kubernetes-cluster/
 [teleport-github-sso]: https://goteleport.com/docs/admin-guides/access-controls/sso/github-sso/

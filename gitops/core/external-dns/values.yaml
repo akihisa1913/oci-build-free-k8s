@@ -1,0 +1,18 @@
+provider:
+  name: cloudflare
+policy: sync
+sources:
+  - service
+  - ingress
+  - crd
+  - gateway-httproute
+managedRecordTypes:
+  - A
+env:
+  - name: CF_API_TOKEN
+    valueFrom:
+      secretKeyRef:
+        name: external-dns-config
+        key: apiKey
+extraArgs:
+  - --exclude-target-net=10.0.0.0/8

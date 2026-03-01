@@ -1,0 +1,6 @@
+appName: dex
+namespace: dex
+helmRepoURL: https://charts.dexidp.io
+chart: dex
+chartVersion: 0.24.0
+gitPath: gitops/core/dex

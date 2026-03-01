@@ -1,0 +1,6 @@
+appName: s3-proxy
+namespace: s3-proxy
+helmRepoURL: https://oxyno-zeta.github.io/helm-charts-v2/
+chart: s3-proxy
+chartVersion: 2.23.1
+gitPath: gitops/core/s3-proxy

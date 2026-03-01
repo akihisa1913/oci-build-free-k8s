@@ -1,0 +1,4 @@
+appName: cert-manager-issuer
+namespace: cert-manager
+gitPath: gitops/core/cert-manager/issuer
+syncWave: "1"

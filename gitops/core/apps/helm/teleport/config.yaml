@@ -1,0 +1,6 @@
+appName: teleport
+namespace: teleport
+helmRepoURL: https://charts.releases.teleport.dev
+chart: teleport-cluster
+chartVersion: 18.6.3
+gitPath: gitops/core/teleport

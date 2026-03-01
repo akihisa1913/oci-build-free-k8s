@@ -1,0 +1,6 @@
+appName: grafana
+namespace: grafana
+helmRepoURL: https://grafana.github.io/helm-charts
+chart: grafana
+chartVersion: 10.5.5
+gitPath: gitops/core/grafana

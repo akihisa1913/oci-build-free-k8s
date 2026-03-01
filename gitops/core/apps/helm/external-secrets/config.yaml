@@ -1,0 +1,6 @@
+appName: external-secrets
+namespace: external-secrets
+helmRepoURL: https://charts.external-secrets.io
+chart: external-secrets
+chartVersion: 1.2.1
+gitPath: gitops/core/external-secrets

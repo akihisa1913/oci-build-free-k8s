@@ -1,0 +1,6 @@
+appName: longhorn
+namespace: longhorn
+helmRepoURL: https://charts.longhorn.io
+chart: longhorn
+chartVersion: 1.10.1
+gitPath: gitops/core/longhorn

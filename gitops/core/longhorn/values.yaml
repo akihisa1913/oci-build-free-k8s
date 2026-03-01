@@ -1,0 +1,6 @@
+defaultSettings:
+  storageMinimalAvailablePercentage: 10
+persistence:
+  defaultClassReplicaCount: 2
+ingress:
+  enabled: false

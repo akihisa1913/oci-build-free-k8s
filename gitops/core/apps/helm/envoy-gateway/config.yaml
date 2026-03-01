@@ -1,0 +1,6 @@
+appName: envoy-gateway
+namespace: envoy-gateway-system
+helmRepoURL: oci://docker.io/envoyproxy
+chart: gateway-helm
+chartVersion: 1.6.1
+gitPath: gitops/core/envoy-gateway

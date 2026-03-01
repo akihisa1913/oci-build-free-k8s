@@ -1,0 +1,33 @@
+chartMode: standalone
+clusterName: teleport.nce.wtf
+kubeClusterName: oci
+proxyListenerMode: multiplex
+auth:
+  teleportConfig:
+    auth_service:
+      authentication:
+        type: github
+authentication:
+  type: github
+  localAuth: true
+  secondFactor: on
+highAvailability:
+  replicaCount: 1
+  certManager:
+    enabled: true
+    issuerName: letsencrypt
+    issuerKind: ClusterIssuer
+operator:
+  enabled: true
+ingress:
+  enabled: false
+proxy:
+  highAvailability:
+    replicaCount: 1
+  service:
+    type: LoadBalancer
+  annotations:
+    service:
+      external-dns.alpha.kubernetes.io/hostname: teleport.nce.wtf
+      oci.oraclecloud.com/load-balancer-type: "nlb"
+      oci-network-load-balancer.oraclecloud.com/oci-network-security-groups: "ocid1.networksecuritygroup.oc1.eu-frankfurt-1.aaaaaaaauxhghg36xuzzjgw2awsd3cv4p2f2jedr5palq6fpy4exd53tve5a"

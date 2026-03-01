@@ -1,0 +1,6 @@
+appName: cert-manager
+namespace: cert-manager
+helmRepoURL: https://charts.jetstack.io
+chart: cert-manager
+chartVersion: v1.19.2
+gitPath: gitops/core/cert-manager
