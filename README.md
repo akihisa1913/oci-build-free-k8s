@@ -165,7 +165,7 @@ oci setup config
 user=ocid1.user.oc1..xxx
 fingerprint=ee:f4:xx:xx
 tenancy=ocid1.tenancy.oc1..xxx
-region=eu-frankfurt-1
+region=ap-tokyo-1
 key_file=/Users/yourname/.oci/oci_api_key.pem
 
 # Terraform OCI バックエンド用 (S3 互換)
@@ -189,26 +189,40 @@ oci os bucket create \
   --compartment-id <YOUR_COMPARTMENT_OCID>
 ```
 
-### Step 2: Terraform バックエンドのネームスペース更新
+### Step 2: Git リポジトリの準備
 
-OCI Object Storage のバックエンド設定にはテナンシーネームスペースが必要です。以下のコマンドで自分のネームスペースを確認し、ファイルを書き換えてください。
-
-```bash
-# テナンシーネームスペースを取得して変数に格納
-NAMESPACE=$(oci os ns get --query 'data' --raw-output)
-
-# 両ファイルのプレースホルダーを置き換え
-sed -i '' "s/<YOUR_TENANCY_NAMESPACE>/$NAMESPACE/g" terraform/infra/_terraform.tf
-sed -i '' "s/<YOUR_TENANCY_NAMESPACE>/$NAMESPACE/g" terraform/config/_terraform.tf
-```
-
-### Step 3: Git リポジトリの準備
-
-このリポジトリを fork または clone して、GitHub に push します。
+このリポジトリを fork または clone します。
 
 ```bash
 git clone https://github.com/YOUR_ORG/oci-build-free-k8s.git
 cd oci-build-free-k8s
+```
+
+### Step 3: 環境固有の値を書き換えて push
+
+Terraform バックエンドのネームスペース・ドメイン・GitHub Organization を一括で書き換え、push します。ArgoCD は push 後のファイルを読み込むため、**push より前にすべての置換を完了させる必要があります**。
+
+```bash
+# ── 設定値 ──────────────────────────────────────────────
+NAMESPACE=$(oci os ns get --query 'data' --raw-output)
+DOMAIN="your-domain.com"        # 例: example.com
+GITHUB_ORG="your-github-org"    # GitHub Organization 名 (個人アカウントの場合はユーザー名)
+
+# ── Terraform バックエンドのネームスペース ──────────────
+sed -i '' "s/<YOUR_TENANCY_NAMESPACE>/$NAMESPACE/g" terraform/infra/_terraform.tf
+sed -i '' "s/<YOUR_TENANCY_NAMESPACE>/$NAMESPACE/g" terraform/config/_terraform.tf
+
+# ── ドメインを一括置換 (gitops/ 配下の全 yaml) ─────────
+find gitops/ -type f -name "*.yaml" \
+  -exec sed -i '' "s/nce\.wtf/$DOMAIN/g" {} +
+
+# ── GitHub Org を一括置換 ───────────────────────────────
+find gitops/ -type f -name "*.yaml" \
+  -exec sed -i '' "s/nce-acme/$GITHUB_ORG/g" {} +
+
+# ── コミットして push ────────────────────────────────────
+git add -A
+git commit -m "chore: configure for own environment"
 git push
 ```
 
@@ -233,7 +247,9 @@ OCI Vault (1つ)
  ├── dex-envoy-client-secret
  ├── slack-api-url
  ├── s3-proxy-user-access-key
- └── s3-proxy-user-secret-key
+ ├── s3-proxy-user-secret-key
+ ├── teleport-github-client-id
+ └── teleport-github-client-secret
 ```
 
 OCI コンソールで Vault を作成後、**Vault 詳細画面 → Secrets → Create Secret** から1つずつ登録してください。登録する値の取得方法は [付録: シークレット取得・発行手順](#付録-シークレット取得発行手順) を参照してください。
@@ -249,18 +265,37 @@ OCI コンソールで Vault を作成後、**Vault 詳細画面 → Secrets →
 | `slack-api-url` | Slack Incoming Webhook URL | Alertmanager 通知 |
 | `s3-proxy-user-access-key` | OCI 顧客シークレットキーのアクセスキー | S3 Proxy → OCI Object Storage |
 | `s3-proxy-user-secret-key` | OCI 顧客シークレットキーのシークレット | S3 Proxy → OCI Object Storage |
+| `teleport-github-client-id` | Teleport 用 GitHub OAuth App の Client ID | Teleport GitHub SSO |
+| `teleport-github-client-secret` | Teleport 用 GitHub OAuth App の Client Secret | Teleport GitHub SSO |
 
-### Step 6: terraform/infra の適用
+### Step 6: S3 Proxy バケット名の設定
+
+S3 Proxy がアクセスする OCI Object Storage バケットを作成し、`values.yaml` に反映します。
+
+```bash
+# バケットを作成
+BUCKET_NAME="your-bucket-name"   # 任意のバケット名
+oci os bucket create \
+  --name "$BUCKET_NAME" \
+  --compartment-id <YOUR_COMPARTMENT_OCID>
+
+# values.yaml のバケット名とS3エンドポイントを書き換え
+NAMESPACE=$(oci os ns get --query 'data' --raw-output)
+sed -i '' "s/tourenbuch/$BUCKET_NAME/g" gitops/core/s3-proxy/values.yaml
+sed -i '' "s/<YOUR_TENANCY_NAMESPACE>/$NAMESPACE/g" gitops/core/s3-proxy/values.yaml
+```
+
+### Step 7: terraform/infra の適用
 
 OKE クラスターと VCN を作成します。
 
 ```bash
 cd terraform/infra
 
-# 変数ファイルを作成
-cat > terraform.tfvars <<EOF
-compartment_id = "ocid1.compartment.oc1..xxx"
-EOF
+# 変数ファイルを作成して値を書き換え
+cp terraform.tfvars.example terraform.tfvars
+# compartment_id と ssh_public_key を編集してください
+# ssh_public_key は `cat ~/.ssh/id_rsa.pub` などで確認できます
 
 # 初期化と適用 (約 15〜20 分)
 terraform init
@@ -274,25 +309,37 @@ terraform apply
 kubectl --kubeconfig ../.kube.config get nodes
 ```
 
-### Step 7: terraform/config の適用
+### Step 8: terraform/config の適用
 
 ArgoCD と Kubernetes 設定をデプロイします。
 
 ```bash
 cd terraform/config
 
-# 変数ファイルを作成 (infra の output 値を使用)
-cat > terraform.tfvars <<EOF
-compartment_id = "ocid1.compartment.oc1..xxx"
-tenancy_id     = "ocid1.tenancy.oc1..xxx"
-vault_id       = "ocid1.vault.oc1..xxx"
-public_subnet_id = "$(cd ../infra && terraform output --raw public_subnet_id)"
-node_pool_id     = "$(cd ../infra && terraform output --raw node_pool_id)"
-git_url          = "https://github.com/YOUR_ORG/oci-build-free-k8s.git"
-EOF
+# 変数ファイルを作成
+cp terraform.tfvars.example terraform.tfvars
+
+# compartment_id / tenancy_id / vault_id / git_url を手動で書き換え
+
+# infra の output から public_subnet_id と node_pool_id を自動入力
+PUBLIC_SUBNET_ID=$(cd ../infra && terraform output --raw public_subnet_id)
+NODE_POOL_ID=$(cd ../infra && terraform output --raw node_pool_id)
+sed -i '' "s|<YOUR_PUBLIC_SUBNET_ID>|$PUBLIC_SUBNET_ID|" terraform.tfvars
+sed -i '' "s|<YOUR_NODE_POOL_ID>|$NODE_POOL_ID|" terraform.tfvars
 
 terraform init
 terraform apply
+
+# apply 後、NSG OCID を gitops へ反映してプッシュ
+# (envoy-gateway / teleport の LB アノテーションに必要)
+NSG_ID=$(terraform output --raw nsg_id)
+sed -i '' "s|ocid1.networksecuritygroup.oc1.ap-tokyo-1.<YOUR_NSG_OCID>|${NSG_ID}|g" \
+  ../../gitops/core/envoy-gateway/envoyproxy.yaml \
+  ../../gitops/core/teleport/values.yaml
+cd ../..
+git add gitops/core/envoy-gateway/envoyproxy.yaml gitops/core/teleport/values.yaml
+git commit -m "chore: set nsg ocid for lb annotations"
+git push
 ```
 
 > [!TIP]
@@ -300,7 +347,7 @@ terraform apply
 > これは `external-secrets` が ArgoCD によってデプロイされる前に Terraform が実行されるためです。
 > ArgoCD が `external-secrets` を正常にデプロイした後に `terraform apply` を再実行してください。
 
-### Step 8: ArgoCD へのアクセス確認
+### Step 9: ArgoCD へのアクセス確認
 
 ```bash
 # ArgoCD の Pod 確認
@@ -318,7 +365,7 @@ kubectl --kubeconfig ../.kube.config -n argocd get secret argocd-initial-admin-s
 
 `core-helm-apps` / `core-gitonly-apps` ApplicationSet が Application を生成し始めると、配下の全コンポーネントが自動デプロイされます。
 
-### Step 9: DNS と証明書の確認
+### Step 10: DNS と証明書の確認
 
 ```bash
 kubectl --kubeconfig ../.kube.config get certificate -A

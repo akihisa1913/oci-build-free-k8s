@@ -1,0 +1,6 @@
+compartment_id   = "<YOUR_COMPARTMENT_OCID>"
+tenancy_id       = "<YOUR_TENANCY_OCID>"
+vault_id         = "<YOUR_VAULT_OCID>"
+public_subnet_id = "<YOUR_PUBLIC_SUBNET_ID>"
+node_pool_id     = "<YOUR_NODE_POOL_ID>"
+git_url          = "https://github.com/<YOUR_ORG>/oci-build-free-k8s.git"

@@ -3,3 +3,7 @@
 #
 #   sensitive = true
 # }
+
+output "nsg_id" {
+  value = module.ingress.nsg_id
+}

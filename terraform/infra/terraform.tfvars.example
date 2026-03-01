@@ -1,0 +1,2 @@
+compartment_id = "<YOUR_COMPARTMENT_OCID>"
+ssh_public_key = "<YOUR_SSH_PUBLIC_KEY>"
