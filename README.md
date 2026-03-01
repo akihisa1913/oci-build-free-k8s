@@ -202,21 +202,42 @@ git push
 > [!NOTE]
 > Git リポジトリ URL の設定は不要です。ArgoCD ApplicationSet は Terraform の `git_url` 変数から直接 URL を参照するため、ファイルの書き換えは必要ありません。
 
-### Step 3: OCI Vault の準備
+### Step 4: シークレットの準備
 
-シークレット管理に OCI Vault を使用します。OCI コンソールで Vault を作成し、以下のシークレットを登録してください:
+各サービスで使用するシークレットを発行し、次の Step 5 で OCI Vault に登録します。取得方法は [付録: シークレット取得・発行手順](#付録-シークレット取得発行手順) を参照してください。
 
-| シークレット名 | 用途 |
-|----------------|------|
-| `cloudflare-api-token` | External DNS / cert-manager (Cloudflare API) |
-| `dex-github-connector` | Dex - GitHub OAuth App のクライアント ID/Secret |
-| `dex-grafana-client` | Dex - Grafana OIDC クライアント |
-| `dex-s3-proxy-client` | Dex - S3 Proxy OIDC クライアント |
-| `dex-envoy-client` | Dex - Envoy Gateway OIDC クライアント |
-| `alertmanager-slack-webhook` | Slack アラート Webhook URL |
-| `s3-proxy-credentials` | OCI Object Storage アクセスキー |
+### Step 5: OCI Vault の準備
 
-### Step 4: terraform/infra の適用
+シークレット管理に **OCI Vault を1つ**作成し、その中に以下のシークレットを個別に登録します。
+
+```
+OCI Vault (1つ)
+ ├── cloudflare-api-token
+ ├── github-dex-client-id
+ ├── github-dex-client-secret
+ ├── dex-grafana-client
+ ├── dex-s3-proxy-client-secret
+ ├── dex-envoy-client-secret
+ ├── slack-api-url
+ ├── s3-proxy-user-access-key
+ └── s3-proxy-user-secret-key
+```
+
+OCI コンソールで Vault を作成後、**Vault 詳細画面 → Secrets → Create Secret** から1つずつ登録してください。登録する値の取得方法は [付録: シークレット取得・発行手順](#付録-シークレット取得発行手順) を参照してください。
+
+| OCI Vault シークレット名 | 値 | 用途 |
+|---|---|---|
+| `cloudflare-api-token` | Cloudflare API トークン文字列 | cert-manager / external-dns 共有 |
+| `github-dex-client-id` | GitHub OAuth App の Client ID | Dex GitHub コネクタ |
+| `github-dex-client-secret` | GitHub OAuth App の Client Secret | Dex GitHub コネクタ |
+| `dex-grafana-client` | 任意のランダム文字列 (Client Secret) | Dex → Grafana OIDC |
+| `dex-s3-proxy-client-secret` | 任意のランダム文字列 (Client Secret) | Dex → S3 Proxy OIDC |
+| `dex-envoy-client-secret` | 任意のランダム文字列 (Client Secret) | Dex → Envoy / Prometheus OIDC |
+| `slack-api-url` | Slack Incoming Webhook URL | Alertmanager 通知 |
+| `s3-proxy-user-access-key` | OCI 顧客シークレットキーのアクセスキー | S3 Proxy → OCI Object Storage |
+| `s3-proxy-user-secret-key` | OCI 顧客シークレットキーのシークレット | S3 Proxy → OCI Object Storage |
+
+### Step 6: terraform/infra の適用
 
 OKE クラスターと VCN を作成します。
 
@@ -240,7 +261,7 @@ terraform apply
 kubectl --kubeconfig ../.kube.config get nodes
 ```
 
-### Step 5: terraform/config の適用
+### Step 7: terraform/config の適用
 
 ArgoCD と Kubernetes 設定をデプロイします。
 
@@ -266,7 +287,7 @@ terraform apply
 > これは `external-secrets` が ArgoCD によってデプロイされる前に Terraform が実行されるためです。
 > ArgoCD が `external-secrets` を正常にデプロイした後に `terraform apply` を再実行してください。
 
-### Step 6: ArgoCD へのアクセス確認
+### Step 8: ArgoCD へのアクセス確認
 
 ```bash
 # ArgoCD の Pod 確認
@@ -284,7 +305,7 @@ kubectl --kubeconfig ../.kube.config -n argocd get secret argocd-initial-admin-s
 
 `core-helm-apps` / `core-gitonly-apps` ApplicationSet が Application を生成し始めると、配下の全コンポーネントが自動デプロイされます。
 
-### Step 7: DNS と証明書の確認
+### Step 9: DNS と証明書の確認
 
 ```bash
 kubectl --kubeconfig ../.kube.config get certificate -A
@@ -450,6 +471,92 @@ Always Free Tier を正しく使用した場合の月額コスト: **¥0**
 - [Teleport Helm デプロイ][teleport-helm-doc]
 - [GitHub SSO 設定][teleport-github-sso]
 - [Teleport Operator][teleport-operator]
+
+---
+
+## 付録: シークレット取得・発行手順
+
+### `cloudflare-api-token` — Cloudflare API トークン
+
+cert-manager (DNS01 チャレンジ) と external-dns (A/CNAME レコード管理) が共有します。
+
+1. Cloudflare ダッシュボード → **My Profile** → **API Tokens** → **Create Token**
+2. **Create Custom Token** を選択し、以下の通り設定:
+
+| 項目 | 値 |
+|------|----|
+| Token name | `oci-k8s-dns` (任意) |
+| Permissions | `Zone - DNS - Edit` |
+| Permissions | `Zone - Zone - Read` |
+| Zone Resources | `Include - Specific zone - <your-domain>` |
+
+> [!IMPORTANT]
+> Zone Resources は **Specific zone** で対象ドメインのみに限定してください。
+> `All zones` にするとアカウント上の全ドメインを操作できるトークンになります。
+
+3. **Continue to summary** → **Create Token** → 表示されたトークン文字列を OCI Vault の `cloudflare-api-token` に登録
+
+---
+
+### `github-dex-client-id` / `github-dex-client-secret` — GitHub OAuth App
+
+Dex が GitHub 認証に使用します。
+
+1. GitHub → **Settings** → **Developer settings** → **OAuth Apps** → **New OAuth App**
+2. 以下の通り設定:
+
+| 項目 | 値 |
+|------|----|
+| Application name | `dex-oci-k8s` (任意) |
+| Homepage URL | `https://login.<your-domain>` |
+| Authorization callback URL | `https://login.<your-domain>/dex/callback` |
+
+3. **Register application** → 表示された **Client ID** を `github-dex-client-id` に登録
+4. **Generate a new client secret** → 表示された **Client Secret** を `github-dex-client-secret` に登録
+
+---
+
+### `dex-grafana-client` / `dex-s3-proxy-client-secret` / `dex-envoy-client-secret` — Dex OIDC クライアントシークレット
+
+Dex の静的クライアント (Grafana / S3 Proxy / Envoy Gateway) 用のシークレットです。
+任意のランダム文字列を生成して OCI Vault に登録してください。
+
+```bash
+# 各シークレットに異なる値を設定する
+openssl rand -base64 32   # dex-grafana-client 用
+openssl rand -base64 32   # dex-s3-proxy-client-secret 用
+openssl rand -base64 32   # dex-envoy-client-secret 用
+```
+
+> [!NOTE]
+> これらの値は Dex と各クライアントアプリで共有される任意の文字列です。
+> Dex の設定 (`dex/values.yaml`) と ExternalSecret の両方が同じ OCI Vault シークレットを参照するため、一度設定した値は変更しないようにしてください。
+
+---
+
+### `slack-api-url` — Slack Incoming Webhook URL
+
+Alertmanager の通知先として使用します。
+
+1. Slack ワークスペース → **Settings & administration** → **Manage apps**
+2. **Incoming WebHooks** → **Add to Slack**
+3. 投稿先チャンネル (`#monitoring` 等) を選択 → **Add Incoming WebHooks integration**
+4. 表示された **Webhook URL** (`https://hooks.slack.com/services/...`) を `slack-api-url` に登録
+
+---
+
+### `s3-proxy-user-access-key` / `s3-proxy-user-secret-key` — OCI 顧客シークレットキー
+
+S3 Proxy が OCI Object Storage にアクセスするための S3 互換認証情報です。
+
+1. OCI コンソール → 右上のユーザーアイコン → **My profile**
+2. 左メニュー → **Customer secret keys** → **Generate secret key**
+3. Name に `s3-proxy` (任意) を入力 → **Generate secret key**
+4. 表示された **Secret** を `s3-proxy-user-secret-key` に登録 (この画面を閉じると再表示できません)
+5. 生成されたキーの **Access Key** 列の値を `s3-proxy-user-access-key` に登録
+
+> [!NOTE]
+> これは [OCI バックエンド用の顧客シークレットキー](前述の `~/.oci/config` の設定) と同じ仕組みですが、用途が異なるため別のキーとして発行することを推奨します。
 
 [lb-annotations]: https://github.com/oracle/oci-cloud-controller-manager/blob/master/docs/load-balancer-annotations.md
 [oke-versions]: https://docs.oracle.com/en-us/iaas/Content/ContEng/Concepts/contengaboutk8sversions.htm
