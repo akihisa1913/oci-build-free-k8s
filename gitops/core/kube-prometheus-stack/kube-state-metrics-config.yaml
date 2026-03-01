@@ -1,0 +1,32 @@
+kube-state-metrics:
+  rbac:
+    extraRules:
+      - apiGroups:
+          - argoproj.io
+        resources:
+          - applications
+          - appprojects
+        verbs: ["list", "watch"]
+  customResourceState:
+    enabled: true
+    config:
+      spec:
+        resources:
+          - groupVersionKind:
+              group: argoproj.io
+              version: v1alpha1
+              kind: Application
+            metricNamePrefix: argocd
+            metrics:
+              - name: "app_info"
+                help: "The current state of an ArgoCD Application resource."
+                each:
+                  type: Info
+                  info:
+                    labelsFromPath:
+                      name: [metadata, name]
+                labelsFromPath:
+                  exported_namespace: [metadata, namespace]
+                  health_status: [status, health, status]
+                  sync_status: [status, sync, status]
+                  project: [spec, project]

@@ -1,0 +1,83 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: dex
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.io
+spec:
+  project: default
+  sources:
+    - repoURL: https://charts.dexidp.io
+      chart: dex
+      targetRevision: 0.24.0
+      helm:
+        values: |
+          envFrom:
+            - secretRef:
+                name: dex-github-connector
+            - secretRef:
+                name: dex-grafana-client
+            - secretRef:
+                name: dex-s3-proxy-client
+            - secretRef:
+                name: dex-envoy-client
+          replicaCount: 2
+          https:
+            enabled: false
+          ingress:
+            enabled: false
+          config:
+            issuer: https://login.nce.wtf/dex/
+            storage:
+              type: kubernetes
+              config:
+                inCluster: true
+            web:
+              http: 0.0.0.0:5556
+            telemetry:
+              http: 0.0.0.0:5558
+            staticClients:
+              - name: Envoy
+                IDEnv: envoy.client-id
+                secretEnv: envoy.client-secret
+                redirectURIs:
+                  - https://storage.nce.wtf/oauth2/callback
+                  - https://prometheus.nce.wtf/oauth2/callback
+              - name: S3Proxy
+                IDEnv: s3proxy.client-id
+                secretEnv: s3proxy.client-secret
+                redirectURIs:
+                  - https://s3.nce.wtf/auth/dex/callback
+              - name: Grafana
+                IDEnv: grafana.client-id
+                secretEnv: grafana.client-secret
+                redirectURIs:
+                  - https://monitoring.nce.wtf/login/generic_oauth
+            connectors:
+              - type: github
+                id: github
+                name: GitHub
+                config:
+                  clientID: $GITHUB_CLIENT_ID
+                  clientSecret: $GITHUB_CLIENT_SECRET
+                  redirectURI: https://login.nce.wtf/dex/callback
+                  orgs:
+                    - name: nce-acme
+                      teams:
+                        - admin
+                        - zuschauer
+                  loadAllGroups: false
+            enablePasswordDB: false
+    - repoURL: GIT_REPO_URL  # Replace with your repository URL
+      targetRevision: HEAD
+      path: gitops/core/dex
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: dex
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

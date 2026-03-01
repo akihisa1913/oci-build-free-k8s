@@ -1,0 +1,22 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: lychee
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.io
+spec:
+  project: default
+  source:
+    repoURL: GIT_REPO_URL  # Replace with your repository URL
+    targetRevision: HEAD
+    path: gitops/core/lychee
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: lychee
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

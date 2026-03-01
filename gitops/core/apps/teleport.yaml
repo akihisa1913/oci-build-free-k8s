@@ -1,0 +1,60 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: teleport
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.io
+spec:
+  project: default
+  sources:
+    - repoURL: https://charts.releases.teleport.dev
+      chart: teleport-cluster
+      targetRevision: 18.6.3
+      helm:
+        values: |
+          chartMode: standalone
+          clusterName: teleport.nce.wtf
+          kubeClusterName: oci
+          proxyListenerMode: multiplex
+          auth:
+            teleportConfig:
+              auth_service:
+                authentication:
+                  type: github
+          authentication:
+            type: github
+            localAuth: true
+            secondFactor: on
+          highAvailability:
+            replicaCount: 1
+            certManager:
+              enabled: true
+              issuerName: letsencrypt
+              issuerKind: ClusterIssuer
+          operator:
+            enabled: true
+          ingress:
+            enabled: false
+          proxy:
+            highAvailability:
+              replicaCount: 1
+            service:
+              type: LoadBalancer
+            annotations:
+              service:
+                external-dns.alpha.kubernetes.io/hostname: teleport.nce.wtf
+                oci.oraclecloud.com/load-balancer-type: "nlb"
+                oci-network-load-balancer.oraclecloud.com/oci-network-security-groups: "ocid1.networksecuritygroup.oc1.eu-frankfurt-1.aaaaaaaauxhghg36xuzzjgw2awsd3cv4p2f2jedr5palq6fpy4exd53tve5a"
+    - repoURL: GIT_REPO_URL  # Replace with your repository URL
+      targetRevision: HEAD
+      path: gitops/core/teleport
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: teleport
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
