@@ -235,19 +235,19 @@ sed -i '' "s/<YOUR_TENANCY_NAMESPACE>/$NAMESPACE/g" terraform/config/_terraform.
 
 # ── ドメインを一括置換 (gitops/ 配下の全 yaml) ─────────
 find gitops/ -type f -name "*.yaml" \
-  -exec sed -i '' "s/nce\.wtf/$DOMAIN/g" {} +
+  -exec sed -i '' "s/<YOUR_DOMAIN>/$DOMAIN/g" {} +
 
 # ── GitHub Org を一括置換 ───────────────────────────────
 find gitops/ -type f -name "*.yaml" \
-  -exec sed -i '' "s/nce-acme/$GITHUB_ORG/g" {} +
+  -exec sed -i '' "s/<YOUR_GITHUB_ORG>/$GITHUB_ORG/g" {} +
 
 # ── Let's Encrypt 登録メールアドレスを置換 ──────────────
 sed -i '' "s/<YOUR_EMAIL>/$EMAIL/" gitops/core/cert-manager/issuer/cluster-issuer.yaml
 
 # ── 置換漏れがないか確認 ────────────────────────────────
 # 以下のコマンドが何も出力しなければ OK
-grep -r "nce\.wtf" gitops/
-grep -r "nce-acme" gitops/
+grep -r "<YOUR_DOMAIN>" gitops/
+grep -r "<YOUR_GITHUB_ORG>" gitops/
 
 # ── コミットして push ────────────────────────────────────
 git add -A
