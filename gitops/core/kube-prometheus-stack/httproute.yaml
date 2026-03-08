@@ -7,7 +7,7 @@ spec:
     - name: envoy
       namespace: envoy-gateway
   hostnames:
-    - "prometheus.nce.wtf"
+    - "prometheus.<YOUR_DOMAIN>"
   rules:
     - matches:
         - path:

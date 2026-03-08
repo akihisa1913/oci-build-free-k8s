@@ -1,8 +1,8 @@
 grafana.ini:
   app_mode: production
   server:
-    domain: monitoring.nce.wtf
-    root_url: https://monitoring.nce.wtf
+    domain: monitoring.<YOUR_DOMAIN>
+    root_url: https://monitoring.<YOUR_DOMAIN>
   users:
     allow_sign_up: false
   auth:
@@ -15,10 +15,10 @@ grafana.ini:
     client_secret: $__file{/etc/secrets/dex_grafana_client/client-secret}
     scopes: openid profile email groups
     email_attribute_path: email
-    auth_url: https://login.nce.wtf/dex/auth
-    token_url: https://login.nce.wtf/dex/token
-    api_url: https://login.nce.wtf/dex/userinfo
-    role_attribute_path: contains(groups[*], 'nce-acme:admin') && 'Admin' || 'Viewer'
+    auth_url: https://login.<YOUR_DOMAIN>/dex/auth
+    token_url: https://login.<YOUR_DOMAIN>/dex/token
+    api_url: https://login.<YOUR_DOMAIN>/dex/userinfo
+    role_attribute_path: contains(groups[*], '<YOUR_GITHUB_ORG>:admin') && 'Admin' || 'Viewer'
 extraSecretMounts:
   - name: dex-grafana-client
     secretName: dex-grafana-client

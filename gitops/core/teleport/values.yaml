@@ -1,5 +1,5 @@
 chartMode: standalone
-clusterName: teleport.nce.wtf
+clusterName: teleport.<YOUR_DOMAIN>
 kubeClusterName: oci
 proxyListenerMode: multiplex
 auth:
@@ -28,6 +28,6 @@ proxy:
     type: LoadBalancer
   annotations:
     service:
-      external-dns.alpha.kubernetes.io/hostname: teleport.nce.wtf
+      external-dns.alpha.kubernetes.io/hostname: teleport.<YOUR_DOMAIN>
       oci.oraclecloud.com/load-balancer-type: "nlb"
       oci-network-load-balancer.oraclecloud.com/oci-network-security-groups: "ocid1.networksecuritygroup.oc1.ap-tokyo-1.<YOUR_NSG_OCID>"
